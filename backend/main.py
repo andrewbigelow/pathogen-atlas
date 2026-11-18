@@ -157,6 +157,13 @@ def receipts_cte(norm: str, commodity: str, f: F) -> tuple[str, list]:
                WHERE commodity = ? AND year BETWEEN ? AND ?""", [commodity, f.y0, f.y1])
 
 
+def hit_cte(genes: list[str]) -> tuple[str, list]:
+    """SQL for the isolates carrying any of `genes`; no genes = any AMR gene."""
+    if not genes:
+        return "SELECT DISTINCT target_acc FROM genes", []
+    return f"SELECT DISTINCT target_acc FROM genes WHERE gene IN ({qs(genes)})", genes
+
+
 def parse_sources(sources: Optional[str], default: tuple = NONCLINICAL) -> list[str]:
     if not sources:
         return list(default)
@@ -217,14 +224,23 @@ def completeness(f: F = Depends()):
                count(*) FILTER (WHERE year IS NULL AND state IS NOT NULL) AS state_only,
                count(*) FILTER (WHERE year IS NULL AND state IS NULL) AS neither,
                count(*) FILTER (WHERE state_from = 'food_origin') AS from_food_origin,
-               count(*) FILTER (WHERE state_from = 'geo_loc_name') AS from_geo
+               count(*) FILTER (WHERE state_from = 'geo_loc_name') AS from_geo,
+               count(*) FILTER (WHERE month IS NOT NULL) AS with_month
         FROM isolates i WHERE {w}
     """, p)[0]
+    by_source = q(f"""
+        SELECT source, count(*) AS total,
+               count(*) FILTER (WHERE year IS NOT NULL AND state IS NOT NULL) AS both,
+               count(*) FILTER (WHERE year IS NOT NULL AND state IS NULL) AS date_only,
+               count(*) FILTER (WHERE year IS NULL AND state IS NOT NULL) AS state_only,
+               count(*) FILTER (WHERE year IS NULL AND state IS NULL) AS neither
+        FROM isolates i WHERE {w} GROUP BY 1
+    """, p)
     by_year = q(f"""
         SELECT year, count(*) AS n, count(state) AS with_state FROM isolates i
         WHERE {w} AND year BETWEEN 2000 AND 2026 GROUP BY 1 ORDER BY 1
     """, p)
-    return {**r, "by_year": by_year}
+    return {**r, "by_year": by_year, "by_source": by_source}
 
 
 # ---------------------------------------------------- T1 / T2 adjusted isolate rate
@@ -260,16 +276,16 @@ def state_rates(f: F = Depends(), commodity: str = "all", norm: str = "economic"
 
 # ------------------------------------------------------- T3 / T4 AMR gene prevalence
 @app.get("/api/gene_prevalence")
-def gene_prevalence(gene: str, f: F = Depends(), commodity: str = "all", norm: str = "economic"):
+def gene_prevalence(gene: str = "", f: F = Depends(), commodity: str = "all", norm: str = "economic"):
     """Per state x year: isolates, isolates carrying `gene`, denominator and detection rate."""
     f.genes, f.states = [], []
-    gl = split(gene) or ["__none__"]
+    hc, hp = hit_cte(split(gene))
     w, p = f.sql(species_only=(norm == "species"))
     rc, rp = receipts_cte(norm, commodity, f)
     rate = ("coalesce(s.n, 0)" if norm == "none" else
             "CASE WHEN r.receipts_k > 0 THEN coalesce(s.n, 0) / (r.receipts_k / 1e6) END")
     rows = q(f"""
-        WITH hit AS (SELECT DISTINCT target_acc FROM genes WHERE gene IN ({qs(gl)})),
+        WITH hit AS ({hc}),
         s AS (
             SELECT i.state, i.year, count(*) AS n, count(h.target_acc) AS n_gene
             FROM isolates i LEFT JOIN hit h USING (target_acc)
@@ -278,12 +294,12 @@ def gene_prevalence(gene: str, f: F = Depends(), commodity: str = "all", norm: s
         SELECT r.state, r.year, coalesce(s.n, 0) AS n, coalesce(s.n_gene, 0) AS n_gene,
                r.receipts_k, {rate} AS rate
         FROM r LEFT JOIN s USING (state, year) ORDER BY r.state, r.year
-    """, gl + p + rp)
+    """, hp + p + rp)
     trend = q(f"""
-        WITH hit AS (SELECT DISTINCT target_acc FROM genes WHERE gene IN ({qs(gl)}))
+        WITH hit AS ({hc})
         SELECT i.year, count(*) AS n, count(h.target_acc) AS n_gene
         FROM isolates i LEFT JOIN hit h USING (target_acc) WHERE {w} GROUP BY 1 ORDER BY 1
-    """, gl + p)
+    """, hp + p)
     return {"gene": gene, "rows": rows, "trend": trend}
 
 
@@ -419,21 +435,21 @@ def cluster_detail(cluster: str):
 
 # --------------------------------------------------------------- T7 gene by source
 @app.get("/api/gene_sources")
-def gene_sources(gene: str, f: F = Depends()):
+def gene_sources(gene: str = "", f: F = Depends()):
     f.genes, f.sources = [], ",".join(ALL_SOURCES)
-    gl = split(gene) or ["__none__"]
+    hc, hp = hit_cte(split(gene))
     w, p = f.sql()
     by_year = q(f"""
-        WITH hit AS (SELECT DISTINCT target_acc FROM genes WHERE gene IN ({qs(gl)}))
+        WITH hit AS ({hc})
         SELECT i.year, i.source, count(*) AS n FROM isolates i JOIN hit USING (target_acc)
         WHERE {w} GROUP BY 1, 2 ORDER BY 1
-    """, gl + p)
+    """, hp + p)
     sub = q(f"""
-        WITH hit AS (SELECT DISTINCT target_acc FROM genes WHERE gene IN ({qs(gl)}))
+        WITH hit AS ({hc})
         SELECT i.source, i.subsource, i.year, count(*) AS n
         FROM isolates i JOIN hit USING (target_acc)
         WHERE {w} GROUP BY ALL ORDER BY 4 DESC
-    """, gl + p)
+    """, hp + p)
     denom = q(f"""
         SELECT i.year, i.source, count(*) AS n FROM isolates i WHERE {w} GROUP BY 1, 2
     """, p)

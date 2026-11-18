@@ -132,6 +132,60 @@ export const STATE_NAMES: Record<string, string> = {
 }
 export const NAME_TO_ABBR = Object.fromEntries(Object.entries(STATE_NAMES).map(([a, n]) => [n, a]))
 
+// ------------------------------------------------------------------ selection
+export interface ModKeys { ctrlKey: boolean; metaKey: boolean; shiftKey: boolean }
+
+/** Plain click selects only `item` (or clears it if it was the only one); Ctrl/⌘/Shift toggles it. */
+export function pickWith(old: string[], item: string, e: ModKeys | undefined, max: number): string[] {
+  const multi = !!e && (e.ctrlKey || e.metaKey || e.shiftKey)
+  if (!multi) return old.length === 1 && old[0] === item ? [] : [item]
+  return old.includes(item) ? old.filter((x) => x !== item) : [...old, item].slice(-max)
+}
+
+/** [2014, 2016, 2017, 2018] -> "2014, 2016–18" */
+export function fmtYears(years: number[]) {
+  const ys = [...years].sort((a, b) => a - b)
+  const runs: [number, number][] = []
+  for (const y of ys) {
+    const last = runs[runs.length - 1]
+    if (last && y === last[1] + 1) last[1] = y
+    else runs.push([y, y])
+  }
+  return runs.map(([a, b]) => (a === b ? String(a) : `${a}–${String(b).slice(2)}`)).join(', ')
+}
+
+// ------------------------------------------------------------------ label placement
+/** Spread end-of-line labels so none are closer than `gap` px, keeping them inside [lo, hi].
+ *  Returns the adjusted y for each input, in input order. */
+export function dodgeLabels(ys: number[], gap: number, lo: number, hi: number): number[] {
+  const order = ys.map((y, i) => ({ y, i })).sort((a, b) => a.y - b.y)
+  const pos = order.map((o) => Math.min(hi, Math.max(lo, o.y)))
+  for (let iter = 0; iter < 50; iter++) {
+    let moved = false
+    for (let k = 1; k < pos.length; k++) {
+      const overlap = gap - (pos[k] - pos[k - 1])
+      if (overlap > 0.01) {
+        pos[k - 1] -= overlap / 2
+        pos[k] += overlap / 2
+        moved = true
+      }
+    }
+    // pin to bounds, then push neighbours away from the walls
+    if (pos.length) {
+      if (pos[0] < lo) pos[0] = lo
+      for (let k = 1; k < pos.length; k++) pos[k] = Math.max(pos[k], pos[k - 1] + gap)
+      if (pos[pos.length - 1] > hi) {
+        pos[pos.length - 1] = hi
+        for (let k = pos.length - 2; k >= 0; k--) pos[k] = Math.min(pos[k], pos[k + 1] - gap)
+      }
+    }
+    if (!moved) break
+  }
+  const out = new Array<number>(ys.length)
+  order.forEach((o, k) => { out[o.i] = pos[k] })
+  return out
+}
+
 // ------------------------------------------------------------------ types
 export interface Meta {
   organisms: { organism: string; n: number }[]
@@ -155,10 +209,11 @@ export interface ClusterRow {
   first_year: number; last_year: number; n_states: number
   n_clinical: number; n_food: number; n_animal: number; n_env: number; med_minsame: number | null
 }
-export interface Completeness {
-  total: number; both: number; date_only: number; state_only: number; neither: number
-  from_food_origin: number; from_geo: number
+export interface CoverageCounts { total: number; both: number; date_only: number; state_only: number; neither: number }
+export interface Completeness extends CoverageCounts {
+  from_food_origin: number; from_geo: number; with_month: number
   by_year: { year: number; n: number; with_state: number }[]
+  by_source: (CoverageCounts & { source: string })[]
 }
 
 // ------------------------------------------------------------------ aggregation across years

@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
-import { useApi, fmtInt, AGG_OPTIONS, SOURCES, SOURCE_VAR, STATE_NAMES } from '../lib'
+import { useApi, fmtInt, AGG_OPTIONS, SOURCE_VAR, STATE_NAMES } from '../lib'
 import type { Meta } from '../lib'
-import { useStore, MAX_STATES } from '../store'
+import { useSection, MAX_STATES } from '../store'
 import type { Filters, Agg, Norm } from '../store'
 
 export function Slider({ label, value, min, max, step, onChange, format = String, hint }: {
@@ -51,11 +51,12 @@ export function Select({ label, value, onChange, options, width, id }: {
   )
 }
 
-// ---------------------------------------------------------------- year range + aggregation (header)
+// ---------------------------------------------------------------- year range + aggregation
 
-/** Two-thumb year slider; commits after the thumb settles so dragging doesn't flood the API. */
+/** Two-thumb year slider with a "combine years by" dropdown; commits after the thumb settles
+ *  so dragging doesn't flood the API. Sits under the map of the page it controls. */
 export function YearRange() {
-  const { meta, f, setF } = useStore()
+  const { meta, f, setF } = useSection()
   const [v, setV] = useState<[number, number]>([f.y0, f.y1])
   useEffect(() => setV([f.y0, f.y1]), [f.y0, f.y1])
   const t = useRef<number | undefined>(undefined)
@@ -67,58 +68,48 @@ export function YearRange() {
   const lo = meta.year_min, hi = meta.year_max
   const pct = (y: number) => ((y - lo) / (hi - lo)) * 100
   return (
-    <div className="field year-range">
-      <span className="field-label">Collection years <b className="tnum">{v[0]}–{v[1]}</b></span>
-      <div className="range2">
-        <div className="track" />
-        <div className="track fill" style={{ left: `${pct(v[0])}%`, right: `${100 - pct(v[1])}%` }} />
-        <input type="range" min={lo} max={hi} step={1} value={v[0]} aria-label="From year"
-          onChange={(e) => commit([Math.min(+e.target.value, v[1]), v[1]])} />
-        <input type="range" min={lo} max={hi} step={1} value={v[1]} aria-label="To year"
-          onChange={(e) => commit([v[0], Math.max(+e.target.value, v[0])])} />
-      </div>
-      <div className="range-ticks"><span>{lo}</span><span>{hi}</span></div>
-      <div className="agg-row">
-        <span className="field-label">Combine years by</span>
-        <div className="seg" role="group" aria-label="Combine years by">
-          {AGG_OPTIONS.map((o) => (
-            <button key={o.v} aria-pressed={f.agg === o.v} onClick={() => setF({ agg: o.v as Agg })}>{o.label}</button>
-          ))}
+    <div className="year-range">
+      <div className="field yr-slider">
+        <span className="field-label">Collection years <b className="tnum">{v[0]}–{v[1]}</b></span>
+        <div className="range2">
+          <div className="track" />
+          <div className="track fill" style={{ left: `${pct(v[0])}%`, right: `${100 - pct(v[1])}%` }} />
+          <input type="range" min={lo} max={hi} step={1} value={v[0]} aria-label="From year"
+            onChange={(e) => commit([Math.min(+e.target.value, v[1]), v[1]])} />
+          <input type="range" min={lo} max={hi} step={1} value={v[1]} aria-label="To year"
+            onChange={(e) => commit([v[0], Math.max(+e.target.value, v[0])])} />
         </div>
+        <div className="range-ticks"><span>{lo}</span><span>{hi}</span></div>
       </div>
+      <Select id="agg" label="Combine years by" value={f.agg} onChange={(v) => setF({ agg: v as Agg })} width={130}
+        options={AGG_OPTIONS.map((o) => ({ v: o.v, label: o.label }))} />
     </div>
   )
 }
 
-// ---------------------------------------------------------------- selected states bar
+// ---------------------------------------------------------------- filter panel
 
-export function SelectionBar() {
-  const { selectedStates, toggleState, setSelectedStates } = useStore()
+/** Section filter card: labelled groups of fields plus a reset link for this section only. */
+export function FilterPanel({ children, note }: { children: ReactNode; note?: ReactNode }) {
+  const { reset } = useSection()
   return (
-    <div className="selection-bar">
-      <span className="field-label">Selected states</span>
-      <div className="chips">
-        {selectedStates.map((s) => (
-          <span key={s} className="chip static sel">{STATE_NAMES[s]}
-            <button aria-label={`Remove ${s}`} onClick={() => toggleState(s)}>✕</button></span>
-        ))}
-        {selectedStates.length < MAX_STATES && (
-          <select value="" aria-label="Add state" onChange={(e) => e.target.value && toggleState(e.target.value)} style={{ height: 28 }}>
-            <option value="">+ add state</option>
-            {Object.entries(STATE_NAMES).filter(([a]) => !selectedStates.includes(a)).map(([a, n]) => <option key={a} value={a}>{n}</option>)}
-          </select>
-        )}
-        {selectedStates.length > 0 && <button className="linklike" onClick={() => setSelectedStates([])}>Clear</button>}
+    <div className="card filter-card">
+      <div className="filter-groups">{children}</div>
+      <div className="filter-foot">
+        <span className="muted small">{note ?? 'These filters apply to this page only.'}</span>
+        <button className="linklike" onClick={reset}>Reset filters</button>
       </div>
-      <span className="muted small">Click a state on any chart to select it alone · Ctrl/⌘-click to add or remove</span>
     </div>
   )
 }
 
-// ---------------------------------------------------------------- per-page filter fields
-
-export function FilterCard({ children }: { children: ReactNode }) {
-  return <div className="card filter-card"><div className="controls" style={{ marginBottom: 0 }}>{children}</div></div>
+export function FilterGroup({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <fieldset className="filter-group">
+      <legend>{label}</legend>
+      <div className="controls" style={{ marginBottom: 0 }}>{children}</div>
+    </fieldset>
+  )
 }
 
 export function commodityLabel(meta: Meta, key: string) {
@@ -133,7 +124,7 @@ export function normUnit(f: Filters, meta: Meta, short = false) {
 }
 
 export function NormFields() {
-  const { meta, f, setF } = useStore()
+  const { meta, f, setF } = useSection()
   return (
     <>
       <Select id="norm" label="Normalize by" value={f.norm} onChange={(v) => setF({ norm: v as Norm })} options={[
@@ -146,6 +137,27 @@ export function NormFields() {
           options={meta.commodities.map((c) => ({ v: c.key, label: c.label }))} />
       )}
     </>
+  )
+}
+
+/** − [n] + counter for picking an exact integer. */
+export function Stepper({ label, value, min, max, step = 1, onChange }: {
+  label: string; value: number; min: number; max: number; step?: number; onChange: (v: number) => void
+}) {
+  const [text, setText] = useState(String(value))
+  useEffect(() => setText(String(value)), [value])
+  const clamp = (v: number) => Math.min(max, Math.max(min, Math.round(v)))
+  const commit = () => { const v = +text; if (isFinite(v) && text !== '') onChange(clamp(v)); else setText(String(value)) }
+  return (
+    <div className="field">
+      <span className="field-label">{label}</span>
+      <div className="stepper">
+        <button type="button" aria-label={`Decrease ${label}`} disabled={value <= min} onClick={() => onChange(clamp(value - step))}>−</button>
+        <input type="number" aria-label={label} min={min} max={max} value={text}
+          onChange={(e) => setText(e.target.value)} onBlur={commit} onKeyDown={(e) => e.key === 'Enter' && commit()} />
+        <button type="button" aria-label={`Increase ${label}`} disabled={value >= max} onClick={() => onChange(clamp(value + step))}>+</button>
+      </div>
+    </div>
   )
 }
 
@@ -217,7 +229,7 @@ export function MultiSelect({ label, values, onChange, options, allLabel, requir
 }
 
 export function PathogenField() {
-  const { meta, f, setF } = useStore()
+  const { meta, f, setF } = useSection()
   return (
     <MultiSelect label="Pathogen species" values={f.organism} onChange={(v) => setF({ organism: v })} allLabel="All pathogens"
       options={meta.organisms.map((o) => ({ v: o.organism, label: o.organism, n: o.n }))} />
@@ -225,7 +237,7 @@ export function PathogenField() {
 }
 
 export function HostField() {
-  const { meta, f, setF } = useStore()
+  const { meta, f, setF } = useSection()
   const species = f.norm === 'species'
   return (
     <MultiSelect label="Host species" values={f.host} allLabel="All hosts"
@@ -241,7 +253,7 @@ export function HostField() {
 }
 
 export function ProductField() {
-  const { meta, f, setF } = useStore()
+  const { meta, f, setF } = useSection()
   const hostLabel = (k: string | null) => meta.hosts.find((h) => h.key === k)?.label ?? 'Other foods'
   const list = meta.products
     .filter((p) => !f.host.length || (p.host && f.host.includes(p.host)))
@@ -253,25 +265,38 @@ export function ProductField() {
   )
 }
 
+/** Source chips limited to the categories this section offers; at least one stays on. */
 export function SourcesField() {
-  const { f, setF } = useStore()
+  const { f, setF, allowedSources } = useSection()
   const restricted = !!(f.host.length || f.product.length)
   const toggle = (s: string) => {
     const next = f.sources.includes(s) ? f.sources.filter((x) => x !== s) : [...f.sources, s]
-    if (next.length) setF({ sources: SOURCES.filter((x) => next.includes(x)) })
+    if (next.length) setF({ sources: allowedSources.filter((x) => next.includes(x)) })
   }
   return (
     <div className="field">
       <span className="field-label">Isolate sources{restricted ? ' (host/product → food & animal only)' : ''}</span>
       <div className="chips">
-        {SOURCES.map((s) => (
-          <button key={s} className="chip" aria-pressed={f.sources.includes(s)} onClick={() => toggle(s)}
-            disabled={restricted && s !== 'Food' && s !== 'Animal'} style={{ opacity: restricted && s !== 'Food' && s !== 'Animal' ? 0.4 : 1 }}>
-            <span className="sw" style={{ background: SOURCE_VAR[s] }} />{s === 'Human clinical' ? 'Clinical' : s}
-          </button>
-        ))}
+        {allowedSources.map((s) => {
+          const off = restricted && s !== 'Food' && s !== 'Animal'
+          return (
+            <button key={s} className="chip" aria-pressed={f.sources.includes(s)} onClick={() => toggle(s)}
+              disabled={off} style={{ opacity: off ? 0.4 : 1 }}>
+              <span className="sw" style={{ background: SOURCE_VAR[s] }} />{s === 'Human clinical' ? 'Clinical' : s}
+            </button>
+          )
+        })}
       </div>
     </div>
+  )
+}
+
+/** States multi-select dropdown (nothing checked = all states). */
+export function StateMultiSelect() {
+  const { selectedStates, setSelectedStates } = useSection()
+  return (
+    <MultiSelect label="States" values={selectedStates} onChange={(v) => setSelectedStates(v.slice(0, MAX_STATES))}
+      allLabel="All states" search options={Object.entries(STATE_NAMES).map(([a, n]) => ({ v: a, label: n }))} />
   )
 }
 
@@ -284,21 +309,22 @@ export function MinCountField({ value, onChange, label = 'Min. isolates', option
   )
 }
 
-/** AMR gene checkboxes, ordered by how many isolates carry it under the current filters.
- *  Several genes = isolates carrying any of them. */
-export function GeneField({ value, onChange, allowAny = false }: { value: string[]; onChange: (g: string[]) => void; allowAny?: boolean }) {
-  const { params } = useStore()
+/** AMR gene checkboxes, ordered by how many isolates carry it under this section's filters.
+ *  Several genes = isolates carrying any of them; none = any AMR gene. */
+export function GeneField() {
+  const { f, setF, params } = useSection()
   const { data } = useApi<{ gene: string; n: number }[]>('genes', { ...params, limit: 300 })
   const opts = useMemo(() => {
     const list: MsOption[] = (data ?? []).map((g) => ({ v: g.gene, label: g.gene, n: g.n }))
-    for (const g of value) if (!list.some((o) => o.v === g)) list.unshift({ v: g, label: `${g} (not found)` })
+    for (const g of f.gene) if (!list.some((o) => o.v === g)) list.unshift({ v: g, label: `${g} (not found)` })
     return list
-  }, [data, value])
-  return <MultiSelect label="AMR gene(s)" values={value} onChange={onChange} options={opts} search
-    required={!allowAny} allLabel={allowAny ? 'Any (no gene filter)' : 'Pick a gene'} width={200} />
+  }, [data, f.gene])
+  return <MultiSelect label="AMR gene(s)" values={f.gene} onChange={(g) => setF({ gene: g })} options={opts} search
+    allLabel="Any AMR gene" width={200} />
 }
 
-/** "tet(A)" / "tet(A) or tet(B)" / "any of 4 genes" */
+/** "tet(A)" / "tet(A) or tet(B)" / "any of 4 genes" / "any AMR gene" */
 export function geneText(g: string[]) {
+  if (!g.length) return 'any AMR gene'
   return g.length <= 2 ? g.join(' or ') : `any of ${g.length} genes`
 }

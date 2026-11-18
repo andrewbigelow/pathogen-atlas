@@ -73,31 +73,26 @@ Counts are from the NCBI snapshot of 13–15 Nov 2026 and the USDA release of 3 
 
 ## Tasks → views
 
-| Task | Tab | View |
+| Task | Page | View |
 |---|---|---|
-| T1 states above an adjusted-rate threshold | Geography | Choropleth + ranked bars + log threshold slider |
-| T2 years a state is above threshold | Geography | State × year heatmap (dots mark years above threshold) + focus line chart |
-| T3 compare states on AMR gene prevalence | Resistance | Choropleth + ranked prevalence with 95% Wilson CI + national trend |
-| T4 prevalence vs adjusted detection discrepancy | Resistance | Log scatter, percentile-rank discrepancy slider, flagged table |
-| T5 top-k clusters above a discovery-rate threshold | SNP clusters | Ranked bars stacked by source, threshold line |
-| T6 clusters with similar discovery curves | SNP clusters | Correlation network (force layout) + small multiples + correlation matrix |
-| T7 source share of a gene's carriers over time | Sources | Stacked area (share / count / carriage %) + sub-source treemap |
-| T8 compare source shares between states over time | Sources | Small-multiple 100% bars per state + per-state treemap |
-| T9 share with usable date and state | Header (always visible) + Data coverage tab | Proportional bar linked to the filters; breakdown by source and year |
+| T1 states above an adjusted-rate threshold | State surveillance | Shared map (colour by detection rate) + linear ranked bars with a draggable threshold line/handle |
+| T2 years a state is above threshold | State surveillance | Line chart per selected state, draggable horizontal threshold (synced with T1), years above listed in the summary table |
+| T3 compare states on AMR gene prevalence | State surveillance | Map (colour by prevalence) + ranked prevalence with 95% Wilson CI + selected states vs national trend |
+| T4 prevalence vs detection discrepancy | State surveillance | Log scatter coloured red/blue/grey by discrepancy threshold, flagged table, map colouring |
+| T5 top-k clusters above a discovery-rate threshold | SNP clusters | Ranked bars stacked by source, top-k stepper, draggable threshold |
+| T6 clusters with similar discovery curves | SNP clusters | Correlation network + detail panel + small multiples (peak marker) + correlation matrix |
+| T7 source share of a gene's carriers over time | Isolate sources | One line per chosen source (share among chosen / of all / count / carriage %) + sub-source treemap |
+| T8 compare source shares between states | Isolate sources | Map to pick states + one sub-source treemap per state, side by side |
+| T9 share with usable date and state | Header widget + Data coverage drawer | Summary for the current page's filters; drawer breaks it down by source, year, state provenance and date precision |
 
-The header holds a two-thumb year slider with a **Combine years by** selector (sum, mean, median, min, max). Each measure is computed per year and then combined; "sum" pools the years.
+The **State surveillance** page has one map shared by T1, T3 and T4. A "Colour map by" dropdown picks the measure, and the year range and "Combine years by" dropdown sit under the map. States selected on the map, bars or scatter appear in a summary table (rate, years above threshold, prevalence with CI, discrepancy) and drive every section below. Plain click selects one item; Ctrl/⌘-click adds or removes. This applies everywhere, including clusters.
 
-Below it, the **Selected states** bar holds the shared state selection. Click a state on any chart to select only that state; Ctrl/⌘-click adds or removes one. The selection drives the line comparison on Geography, the selected-states table and trend lines on Resistance, the optional "Selected states" scope on SNP clusters, and the panels on Sources.
-
-Each tab has its own filter row with the dropdowns that apply to it:
+Each page keeps **its own filters**, grouped as Isolates / AMR / Time / Measure, so changing one page never changes another:
 
 - **Normalize by**: economic output (receipts of a chosen commodity), species (each host species divided by its own commodity), or none.
-- **Pathogen species**, **Host species** and **Food product**: checkbox dropdowns. Check several to combine them (for example chicken + cattle); nothing checked means all. Food products are grouped by host and limited to the checked hosts.
-- **AMR gene(s)**: searchable checkboxes. Several genes means isolates carrying any of them.
-- **Min. isolates**.
-- **Isolate sources**.
-
-The pathogen, host, product, source and normalization choices are shared across tabs.
+- **Pathogen species**, **Host species** and **Food product**: checkbox dropdowns. Check several to combine them; nothing checked means all.
+- **AMR gene(s)**: searchable checkboxes. Several genes means isolates carrying any of them; none means any AMR gene.
+- **Isolate sources**: Food and Environment on the state page (clinical isolates rarely report a state); all sources on Sources and SNP clusters.
 
 ## Credits
 
