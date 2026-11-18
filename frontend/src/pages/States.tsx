@@ -588,15 +588,26 @@ function Scatter({ rows, dThr, show, hide, tip, selected, onPick, gene, xLabel }
   const h = 380
   const m = { l: 48, r: 20, t: 16, b: 40 }
   if (rows.length < 3) return <div ref={ref} className="muted">Not enough states with data.</div>
-  const x = d3.scaleLog().domain(d3.extent(rows, (r) => r.rate!) as [number, number]).nice().range([m.l, w - m.r])
-  const y = d3.scaleLinear().domain([0, d3.max(rows, (r) => r.prevalence!) ?? 1]).nice().range([h - m.b, m.t])
+  // Fit both axes to the plotted values (with a little padding) so the dots spread across the plot
+  // instead of pooling in a corner of a domain rounded out to whole decades / starting at 0.
+  const [rLo, rHi] = d3.extent(rows.filter((r) => r.rate! > 0), (r) => r.rate!) as [number, number]
+  const lr = rHi > rLo ? Math.log10(rHi / rLo) * 0.06 : 0.15 // pad in log space
+  const x = d3.scaleLog().domain([rLo / 10 ** lr, rHi * 10 ** lr]).range([m.l, w - m.r])
+  const [pLo, pHi] = d3.extent(rows, (r) => r.prevalence!) as [number, number]
+  const pp = pHi > pLo ? (pHi - pLo) * 0.08 : 0.02
+  const y = d3.scaleLinear().domain([Math.max(0, pLo - pp), Math.min(1, pHi + pp)]).range([h - m.b, m.t])
+  // log ticks: prefer 1-2-5 mantissas; fall back to every tick if the range is too narrow for those
+  const allX = x.ticks(8)
+  const niceX = allX.filter((t) => /^[125]$/.test(t.toExponential().charAt(0)))
+  const xTicks = (niceX.length >= 3 ? niceX : allX).filter((_, i, a) => a.length <= 7 || i % Math.ceil(a.length / 6) === 0)
+  const pctFmt = d3.format(pHi - pLo < 0.05 ? '.1%' : '.0%')
   const sorted = [...rows].sort((a, b) => Number(selected.includes(a.state)) - Number(selected.includes(b.state)) || Math.abs(a.d!) - Math.abs(b.d!))
   return (
     <div ref={ref}>
       <svg width={w} height={h}>
         {y.ticks(5).map((t) => (<g key={t} className="grid"><line x1={m.l} x2={w - m.r} y1={y(t)} y2={y(t)} />
-          <text x={m.l - 6} y={y(t) + 4} textAnchor="end">{d3.format('.0%')(t)}</text></g>))}
-        {x.ticks(5).filter((t) => /^[13]/.test(String(t))).map((t) => (<g key={t} className="grid"><line x1={x(t)} x2={x(t)} y1={m.t} y2={h - m.b} />
+          <text x={m.l - 6} y={y(t) + 4} textAnchor="end">{pctFmt(t)}</text></g>))}
+        {xTicks.map((t) => (<g key={t} className="grid"><line x1={x(t)} x2={x(t)} y1={m.t} y2={h - m.b} />
           <text x={x(t)} y={h - m.b + 14} textAnchor="middle">{fmtRate(t)}</text></g>))}
         <text x={(m.l + w - m.r) / 2} y={h - 4} textAnchor="middle">{xLabel}</text>
         <text transform={`translate(12,${(m.t + h - m.b) / 2}) rotate(-90)`} textAnchor="middle">Share with {gene} →</text>
