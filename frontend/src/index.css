@@ -26,6 +26,8 @@
   --shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 2px 8px rgba(0, 0, 0, 0.04);
 }
 
+/* Dark palette. Applied when the OS asks for dark and the user has not forced
+   light, or when the user has explicitly chosen dark from the header toggle. */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme='light']) {
     color-scheme: dark;
@@ -54,6 +56,43 @@
     --shadow: none;
   }
 }
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --bg: #121211;
+  --surface-1: #1a1a19;
+  --surface-2: #242422;
+  --border: #2f2f2c;
+  --grid: #2a2a28;
+  --text-primary: #f0efec;
+  --text-secondary: #c3c2b7;
+  --text-muted: #8f8e88;
+  --accent: #f1605d;
+  --accent-soft: #3b1f2a;
+  --focus: #f0efec;
+  --flag: #f0efec;
+  --src-clinical: #3987e5;
+  --src-food: #d95926;
+  --src-animal: #199e70;
+  --src-env: #c98500;
+  --src-unknown: #5c5b57;
+  --div-neg: #3987e5;
+  --div-mid: #383835;
+  --div-pos: #e66767;
+  --nodata: #2a2a28;
+  --hover: #2c2c29;
+  --shadow: none;
+}
+
+/* Header theme toggle: one icon button that swaps sun/moon. */
+.theme-toggle {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 32px; height: 32px; padding: 0;
+  border: 1px solid var(--border); border-radius: 6px;
+  background: var(--surface-1); color: var(--text-secondary); cursor: pointer;
+}
+.theme-toggle:hover { background: var(--hover); color: var(--text-primary); }
+.theme-toggle svg { width: 16px; height: 16px; display: block; }
 
 * { box-sizing: border-box; }
 html, body { margin: 0; }
@@ -110,6 +149,19 @@ select:focus-visible, input:focus-visible, button:focus-visible { outline: 2px s
 .tab[aria-selected='true'] { color: var(--text-primary); border-bottom-color: var(--accent); }
 
 main { max-width: 1480px; margin: 0 auto; padding: 20px 24px 60px; }
+
+/* About fills the same width as every other section. Prose is kept readable by
+   splitting the definition list into columns once there is room, rather than by
+   narrowing the card. */
+.about-card { width: 100%; }
+.about-card p, .about-card h2, .about-card h3 { max-width: 76ch; }
+.about-defs { columns: 2; column-gap: 40px; }
+.about-defs > li { break-inside: avoid; margin-bottom: 8px; }
+@media (max-width: 1000px) { .about-defs { columns: 1; } }
+.about-steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; margin: 12px 0 4px; }
+.about-step { background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; }
+.about-step h4 { margin: 0 0 4px; font-size: 13px; }
+.about-step p { margin: 0; font-size: 13px; color: var(--text-secondary); max-width: none; }
 .grid { display: grid; gap: 16px; }
 .g-2 { grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); }
 .g-2e { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }

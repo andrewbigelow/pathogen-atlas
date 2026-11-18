@@ -252,12 +252,29 @@ export function HostField() {
   )
 }
 
+/** Foods with no USDA host commodity used to fall into one undifferentiated
+ *  "Other foods" group. Split them along IFSAC lines so produce, seafood and
+ *  prepared foods can be found and selected as groups. */
+const OTHER_FOOD_GROUPS: [RegExp, string][] = [
+  [/fruit|melon|berr/, 'Produce · fruit'],
+  [/vegetable|root\/underground|sprout|herb|leafy/, 'Produce · vegetables'],
+  [/fungi|mushroom/, 'Produce · fungi (mushrooms)'],
+  [/fish|crustacean|mollusk|shellfish|seafood/, 'Seafood'],
+  [/grain|nut|seed|legume|bean|oil/, 'Grains, nuts & seeds'],
+  [/dairy|egg/, 'Dairy & eggs'],
+  [/multi-ingredient|supplement|prepared|bakery|confection|beverage|sauce|spice/, 'Prepared & multi-ingredient'],
+  [/feed|companion animal|pet/, 'Animal feed & pet food'],
+]
+const otherFoodGroup = (product: string) =>
+  OTHER_FOOD_GROUPS.find(([re]) => re.test(product))?.[1] ?? 'Unspecified / other'
+
 export function ProductField() {
   const { meta, f, setF } = useSection()
-  const hostLabel = (k: string | null) => meta.hosts.find((h) => h.key === k)?.label ?? 'Other foods'
+  const hostLabel = (k: string | null, product: string) =>
+    meta.hosts.find((h) => h.key === k)?.label ?? otherFoodGroup(product)
   const list = meta.products
     .filter((p) => !f.host.length || (p.host && f.host.includes(p.host)))
-    .map((p) => ({ v: p.product, label: p.product[0].toUpperCase() + p.product.slice(1), n: p.n, group: hostLabel(p.host) }))
+    .map((p) => ({ v: p.product, label: p.product[0].toUpperCase() + p.product.slice(1), n: p.n, group: hostLabel(p.host, p.product) }))
     .sort((a, b) => a.group.localeCompare(b.group) || (b.n ?? 0) - (a.n ?? 0))
   return (
     <MultiSelect label="Food product" values={f.product} onChange={(v) => setF({ product: v })} search

@@ -22,7 +22,8 @@ const SEGS: { key: keyof ClusterRow | 'other'; src: string }[] = [
 const segVal = (c: ClusterRow, k: string) =>
   k === 'other' ? c.n - c.n_clinical - c.n_food - c.n_animal - c.n_env : (c[k as keyof ClusterRow] as number)
 const dominant = (c: ClusterRow) => SEGS.reduce((best, s) => (segVal(c, s.key) > segVal(c, best.key) ? s : best)).src
-const label = (c: ClusterRow) => `${c.serovar ?? c.organism} · ${c.cluster.split('.')[0].replace('PDS0000', 'PDS…')}`
+// Full accession, unabbreviated: the bar chart reserves enough left margin for it.
+const label = (c: ClusterRow) => `${c.serovar ?? c.organism} · ${c.cluster.split('.')[0]}`
 
 function rateLabel(agg: AggHow) {
   return agg === 'sum' ? 'Isolates in window' : `${aggWord(agg)} isolates / yr`
@@ -152,8 +153,11 @@ function ClusterBars({ rows, thr, setThr, years, agg, show, hide, selected, onPi
 }) {
   const [ref, w] = useWidth<HTMLDivElement>()
   const rh = 20
-  const m = { l: Math.min(260, w * 0.35), r: 60, t: 22 }
   const sorted = [...rows].sort((a, b) => b.rate - a.rate)
+  // Left margin sized to the longest label actually on screen (~6.4px per character
+  // at 13px Inter) so full serovar + PDS accession fits without clipping.
+  const longest = sorted.reduce((n, c) => Math.max(n, label(c).length), 0)
+  const m = { l: Math.max(140, Math.min(Math.ceil(longest * 6.4) + 16, w * 0.42)), r: 60, t: 22 }
   const x = d3.scaleLinear().domain([0, d3.max(sorted, (r) => r.rate) || 1]).nice().range([m.l, w - m.r])
   const bottom = m.t + sorted.length * rh
   return (

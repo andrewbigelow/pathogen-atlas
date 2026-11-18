@@ -162,7 +162,10 @@ export default function States() {
             <div className="legend" style={{ marginTop: 4 }}>
               {colorBy === 'rate' && <>
                 <ColorLegend log scale={rateColor} label={`${rateLabel} (log)`} format={fmtRate} marker={{ value: thr, label: 'threshold' }} />
-                <span className="key"><span className="sw" style={{ border: '2px solid var(--flag)' }} />≥ threshold ({fmtRate(thr)})</span>
+                <span className="key" title="States whose detection rate is at or above the threshold are outlined on the map.">
+                  <span className="sw" style={{ border: '2px solid var(--flag)' }} />
+                  outlined = at or above threshold ({fmtRate(thr)})
+                </span>
               </>}
               {colorBy === 'prev' && <ColorLegend scale={prevColor} label={prevLabel} format={d3.format('.0%')} />}
               {colorBy === 'disc' && <DiscLegend thr={dThr} />}
@@ -386,9 +389,15 @@ function FocusLines({ rows, thr, setThr, states, dark, unit, isDefault, pick, sh
   const x = d3.scaleLinear().domain(d3.extent(years) as [number, number]).range([m.l, w - m.r])
   const ymax = Math.max(thr * 1.15, d3.max(allPts, (d) => d.rate ?? 0) ?? 1)
   const ymin = Math.max(0.01, Math.min(thr > 0 ? thr / 1.5 : Infinity, d3.min(allPts, (d) => d.rate ?? 0) ?? 0.1))
+  // Lines are position-encoded, not length-encoded, so the linear axis starts at the
+  // lowest plotted value (less a margin) rather than at zero. This keeps the series
+  // and the threshold readable instead of squashing them into the top of the panel.
+  // The floor is kept at 0 when the data nearly reaches it, so nothing looks clipped.
+  const lo = Math.min(thr, d3.min(allPts, (d) => d.rate ?? 0) ?? 0)
+  const linFloor = lo <= ymax * 0.15 ? 0 : Math.max(0, lo - (ymax - lo) * 0.1)
   const y = scale === 'log'
     ? d3.scaleLog().domain([ymin, ymax]).nice().range([h - m.b, m.t])
-    : d3.scaleLinear().domain([0, ymax]).nice().range([h - m.b, m.t])
+    : d3.scaleLinear().domain([linFloor, ymax]).nice().range([h - m.b, m.t])
   const yTicks = scale === 'log' ? y.ticks(5).filter((t) => /^[125]/.test(String(t))) : y.ticks(5)
   const line = d3.line<PrevRow>().x((d) => x(d.year)).y((d) => y(d.rate ?? 0))
   const withPts = series.filter((d) => d.pts.length)
@@ -461,7 +470,14 @@ function PrevDots({ rows, show, hide, tip, selected, onPick, pooled }: {
   const m = { l: 34, r: 16, t: 18 }
   const yOf = (i: number) => m.t + i * rh + (i >= top.length ? 10 : 0)
   const ci = list.map((r) => wilson(r.n_gene, r.n))
-  const x = d3.scaleLinear().domain([0, Math.max(d3.max(list, (r) => r.prevalence ?? 0) ?? 0, pooled ? d3.max(ci, (c) => c[1]) ?? 0 : 0) || 1]).nice().range([m.l, w - m.r])
+  // Dot plot with intervals: points, not bars, so the axis may start above zero.
+  // It is tightened to the span of the plotted intervals to make the differences
+  // between states visible, and falls back to zero when the data runs close to it.
+  const hiX = Math.max(d3.max(list, (r) => r.prevalence ?? 0) ?? 0, pooled ? d3.max(ci, (c) => c[1]) ?? 0 : 0) || 1
+  const loX = Math.min(d3.min(list, (r) => r.prevalence ?? Infinity) ?? 0, pooled ? d3.min(ci, (c) => c[0]) ?? 0 : Infinity)
+  const x = d3.scaleLinear()
+    .domain([loX <= hiX * 0.15 ? 0 : Math.max(0, loX - (hiX - loX) * 0.08), hiX])
+    .nice().range([m.l, w - m.r])
   return (
     <div ref={ref}>
       <div className="field-label" style={{ marginBottom: 4 }}>Top 25 states{extra.length ? ' + selected' : ''} · prevalence{pooled ? ' with 95% CI' : ''}</div>
@@ -506,7 +522,14 @@ function Trend({ trend, rows, states, gene, dark, show, hide }: {
   if (nat.length < 2) return <div ref={ref} className="muted small">Too few years with data for a trend.</div>
   const years = [...new Set(series.flatMap((s) => s.pts.map((p) => p.year)))].sort((a, b) => a - b)
   const x = d3.scaleLinear().domain(d3.extent(years) as [number, number]).range([m.l, w - m.r])
-  const y = d3.scaleLinear().domain([0, d3.max(series.flatMap((s) => s.pts), (d) => d.p) || 0.01]).nice().range([h - m.b, m.t])
+  // Trend lines: track the plotted range rather than always anchoring at zero, so a
+  // single tall spike cannot flatten every other series against the baseline.
+  const ps = series.flatMap((s) => s.pts).map((d) => d.p)
+  const pHi = d3.max(ps) || 0.01
+  const pLo = d3.min(ps) ?? 0
+  const y = d3.scaleLinear()
+    .domain([pLo <= pHi * 0.15 ? 0 : Math.max(0, pLo - (pHi - pLo) * 0.1), pHi])
+    .nice().range([h - m.b, m.t])
   const ends = series.filter((s) => s.key !== 'US' && s.pts.length)
   const endY = ends.map((s) => y(s.pts[s.pts.length - 1].p))
   const labelY = dodgeLabels(endY, 13, m.t + 4, h - m.b)
